@@ -89,6 +89,7 @@ bool CloudClient::poll_once() {
   char auth[196];
   std::snprintf(auth, sizeof(auth), "Bearer %s", credential_);
   esp_http_client_set_header(seen_client, "Authorization", auth);
+  esp_http_client_set_method(seen_client, HTTP_METHOD_POST);
   const esp_err_t seen_err = esp_http_client_perform(seen_client);
   const int seen_status = esp_http_client_get_status_code(seen_client);
   esp_http_client_cleanup(seen_client);
@@ -114,20 +115,28 @@ bool CloudClient::poll_once() {
   if (success) {
     char command_id[40]{};
     char* id = std::strstr(body, "\"commandId\":\"");
+    const bool is_power_press = std::strstr(body, "\"kind\":\"power_press\"") != nullptr;
     if (id != nullptr) {
       id += 13;
       char* end = std::strchr(id, '"');
       if (end != nullptr && end - id < static_cast<int>(sizeof(command_id))) {
         std::memcpy(command_id, id, end - id);
-        const PressResult result = actuator_->request_press(command_id);
+        const PressResult result = is_power_press
+                                      ? actuator_->request_press(command_id)
+                                      : PressResult::kInvalidCommand;
         ESP_LOGI(kTag, "cloud command result=%d", static_cast<int>(result));
+        if (result == PressResult::kAccepted) {
+          // request_press queues the pulse; wait until its 300 ms actuation window has elapsed before acknowledging execution.
+          vTaskDelay(pdMS_TO_TICKS(PowerActuator::kPulseMs + 50));
+        }
         const char* status_text = result == PressResult::kAccepted ? "executed" :
-                                  result == PressResult::kDuplicate ? "rejected" : "rejected";
+                                  result == PressResult::kDuplicate ? "rejected" : "failed";
         char result_url[384];
         std::snprintf(result_url, sizeof(result_url), "%s/api/device/%s/commands/result", base_url_, device_id_);
         esp_http_client_config_t result_config{};
         result_config.url = result_url;
         result_config.timeout_ms = 4000;
+        result_config.crt_bundle_attach = esp_crt_bundle_attach;
         esp_http_client_handle_t result_client = esp_http_client_init(&result_config);
         if (result_client != nullptr) {
           esp_http_client_set_header(result_client, "Authorization", auth);
@@ -136,6 +145,8 @@ bool CloudClient::poll_once() {
           if (!now_iso(completed_at)) {
             ESP_LOGW(kTag, "command executed but system time is not synchronized");
             esp_http_client_cleanup(result_client);
+            esp_http_client_close(client);
+            esp_http_client_cleanup(client);
             return false;
           }
           char result_body[256];
@@ -144,7 +155,12 @@ bool CloudClient::poll_once() {
                         command_id, status_text, completed_at);
           esp_http_client_set_post_field(result_client, result_body, std::strlen(result_body));
           esp_http_client_set_method(result_client, HTTP_METHOD_POST);
-          esp_http_client_perform(result_client);
+          const esp_err_t result_err = esp_http_client_perform(result_client);
+          const int result_status = esp_http_client_get_status_code(result_client);
+          if (result_err != ESP_OK || result_status < 200 || result_status >= 300) {
+            ESP_LOGW(kTag, "command result upload failed: err=%s status=%d",
+                     esp_err_to_name(result_err), result_status);
+          }
           esp_http_client_cleanup(result_client);
         }
       }
