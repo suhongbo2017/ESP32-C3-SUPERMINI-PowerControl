@@ -7,8 +7,10 @@
 #include "environment_sensor.hpp"
 #include "power_led_monitor.hpp"
 #include "control_policy.hpp"
+#include "cloud_client.hpp"
 
 #include "esp_log.h"
+#include "esp_sntp.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
@@ -23,6 +25,7 @@ pc_power::WifiManager g_wifi_manager;
 pc_power::ReachabilityMonitor g_reachability_monitor;
 pc_power::EnvironmentSensor g_environment_sensor;
 pc_power::PowerLedMonitor g_power_led_monitor;
+pc_power::CloudClient g_cloud_client;
 }  // namespace
 
 extern "C" void app_main() {
@@ -43,7 +46,11 @@ extern "C" void app_main() {
     ESP_LOGE(kTag, "maintenance commands unavailable: %s", esp_err_to_name(err));
   }
   ESP_ERROR_CHECK(g_wifi_manager.start());
+  esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
+  esp_sntp_setservername(0, const_cast<char*>("pool.ntp.org"));
+  esp_sntp_init();
   ESP_ERROR_CHECK(g_reachability_monitor.start(&g_wifi_manager));
+  ESP_ERROR_CHECK(g_cloud_client.start(&g_wifi_manager, &g_power_actuator));
   ESP_LOGI(kTag, "startup complete; credentials_configured=%s",
            g_local_auth.is_configured() ? "true" : "false");
   while (true) {

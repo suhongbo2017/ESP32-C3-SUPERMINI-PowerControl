@@ -392,7 +392,7 @@ esp_err_t LocalServer::page_handler(httpd_req_t* request) {
       "function pruneHistory(){const cutoff=Date.now()-maxAge;while(history.length&&history[0].time<cutoff)history.shift();if(history.length>maxHistory)history.splice(0,history.length-maxHistory)}function restoreHistory(){try{const saved=JSON.parse(localStorage.getItem(historyKey)||'[]');if(Array.isArray(saved))history=saved.filter(p=>p&&Number.isFinite(p.time)&&Number.isFinite(p.temperature)&&Number.isFinite(p.humidity));}catch(e){history=[]}pruneHistory();drawChart()}function saveHistory(){pruneHistory();try{localStorage.setItem(historyKey,JSON.stringify(history))}catch(e){}}"
       "function drawChart(){const canvas=$('environmentChart'),box=canvas.getBoundingClientRect(),ratio=window.devicePixelRatio||1,w=Math.max(1,box.width),h=Math.max(1,box.height);canvas.width=w*ratio;canvas.height=h*ratio;const ctx=canvas.getContext('2d');ctx.scale(ratio,ratio);ctx.clearRect(0,0,w,h);const pad={l:42,r:42,t:20,b:28},cw=w-pad.l-pad.r,ch=h-pad.t-pad.b;ctx.font='11px system-ui,Microsoft YaHei,sans-serif';ctx.fillStyle='#657673';ctx.textAlign='right';ctx.textBaseline='middle';[50,25,0].forEach((v,i)=>{let y=pad.t+ch*i/2;ctx.fillText(v+'°',pad.l-7,y)});ctx.textAlign='left';[100,50,0].forEach((v,i)=>{let y=pad.t+ch*i/2;ctx.fillText(v+'%',w-pad.r+7,y)});ctx.textAlign='center';ctx.textBaseline='top';if(history.length>0){const age=Math.max(0,Date.now()-history[0].time);ctx.fillText('现在',w-pad.r,h-pad.b+8);ctx.fillText('−'+Math.round(age/60000)+' 分钟',pad.l,h-pad.b+8)}ctx.strokeStyle='#dce4e2';ctx.lineWidth=1;ctx.beginPath();for(let i=0;i<3;i++){let y=pad.t+ch*i/2;ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y)}ctx.stroke();if(history.length<2)return;const draw=(key,color,min,max)=>{ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();history.forEach((p,i)=>{let x=pad.l+cw*i/(history.length-1),y=pad.t+ch*(1-(p[key]-min)/(max-min));i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke()};draw('temperature','#c85d3d',0,50);draw('humidity','#167e72',0,100)}window.addEventListener('resize',drawChart);restoreHistory();"
       "async function load(){try{let r=await fetch('/api/local/status');if(r.status===401){$('connection').textContent='需要登录';notice.textContent='请使用本地设备账号登录';return}if(!r.ok)throw Error();let s=await r.json();"
-      "$('connection').textContent='设备已连接';$('wifiState').textContent=s.wifi==='connected'?'已连接':'未连接';$('ssid').textContent=s.ssid==='unavailable'?'不可用':s.ssid;$('ip').textContent=s.ip;$('pingTarget').textContent=s.pingTarget||'未设置';$('pingSummary').textContent=(s.pingTarget||'未设置')+'：'+(s.reachability==='reachable'?'可达':s.reachability==='unreachable'?'不可达':'未知');$('pingSummary').className='value '+(s.reachability==='reachable'?'glow':'');$('pingCountdown').textContent=s.pingCountdown;$('temperature').textContent=s.sensorAvailable?s.temperature.toFixed(1)+' °C':'传感器不可用';$('humidity').textContent=s.sensorAvailable?s.humidity.toFixed(1)+' %':'传感器不可用';if(s.sensorAvailable){history.push({time:Date.now(),temperature:s.temperature,humidity:s.humidity});saveHistory();drawChart()}$('pcState').textContent=s.powerLedLevel?'LED 灯熄灭':'LED 灯亮';notice.textContent='设备状态正常';}catch(e){$('connection').textContent='连接失败';notice.textContent='无法读取设备状态，请检查网络连接';}}"
+      "$('connection').textContent='设备已连接';$('wifiState').textContent=s.wifi==='connected'?'已连接':'未连接';$('ssid').textContent=s.ssid==='unavailable'?'不可用':s.ssid;$('ip').textContent=s.ip;$('pingTarget').textContent=s.pingTarget||'未设置';$('pingSummary').textContent=(s.pingTarget||'未设置')+'：'+(s.reachability==='reachable'?'可达':s.reachability==='unreachable'?'不可达':'未知');$('pingSummary').className='value '+(s.reachability==='reachable'?'glow':'');$('pingCountdown').textContent=s.pingCountdown;$('temperature').textContent=s.sensorAvailable?s.temperature.toFixed(1)+' °C':'传感器不可用';$('humidity').textContent=s.sensorAvailable?s.humidity.toFixed(1)+' %':'传感器不可用';if(s.sensorAvailable){history.push({time:Date.now(),temperature:s.temperature,humidity:s.humidity});saveHistory();drawChart()}$('pcState').textContent=s.powerLedState==='blinking'?'LED 闪烁（可能为睡眠状态）':s.powerLedLevel?'LED 灯熄灭':'LED 灯亮';notice.textContent='设备状态正常';}catch(e){$('connection').textContent='连接失败';notice.textContent='无法读取设备状态，请检查网络连接';}}"
       "load();setInterval(load,5000);const power=$('power'),cooldown=$('powerCooldown');let cooling=false;power.onclick=async()=>{if(cooling)return;if(!confirm('即将真实模拟按下电脑电源键一次。若电脑已开机，可能触发关机或睡眠。确认继续？'))return;cooling=true;power.disabled=true;let left=10;cooldown.textContent='操作保护中，请等待 '+left+' 秒';let timer=setInterval(()=>{left--;cooldown.textContent=left>0?'操作保护中，请等待 '+left+' 秒':'请勿连续触发电源键';if(left<=0){clearInterval(timer);if(!power.dataset.requesting){power.disabled=false;cooldown.textContent='可以进行下一次操作';cooling=false}}},1000);power.dataset.requesting='1';try{let r=await fetch('/api/local/power-press',{method:'POST'});notice.textContent=r.ok?'电源键操作已发送':('操作失败：'+await r.text())}catch(e){notice.textContent='请求失败，请检查设备连接'}finally{delete power.dataset.requesting;if(left<=0){power.disabled=false;cooldown.textContent='可以进行下一次操作';cooling=false}}};"
       "$('ping').onsubmit=async e=>{e.preventDefault();notice.textContent='正在保存 Ping 目标…';let r=await fetch('/api/local/ping-target',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(e.target))});notice.textContent=r.ok?'Ping 目标已保存，设备将在 30 秒周期内执行测试':'Ping 配置失败：'+await r.text();};"
       "</script></body></html>";
@@ -529,14 +529,25 @@ esp_err_t LocalServer::status_handler(httpd_req_t* request) {
     case Reachability::kUnknown:
       break;
   }
+  const char* power_led_state = "low";
+  switch (context->power_led->state()) {
+    case PowerLedState::kHigh:
+      power_led_state = "high";
+      break;
+    case PowerLedState::kBlinking:
+      power_led_state = "blinking";
+      break;
+    case PowerLedState::kLow:
+      break;
+  }
   std::snprintf(body, sizeof(body),
-                "{\"configured\":%s,\"wifi\":\"%s\",\"ssid\":\"%s\",\"ip\":\"%s\",\"pingTarget\":\"%s\",\"reachability\":\"%s\",\"pingCountdown\":%u,\"sensorAvailable\":%s,\"temperature\":%.1f,\"humidity\":%.1f,\"powerLedLevel\":%s,\"pcPowerState\":\"unknown\"}",
+                "{\"configured\":%s,\"wifi\":\"%s\",\"ssid\":\"%s\",\"ip\":\"%s\",\"pingTarget\":\"%s\",\"reachability\":\"%s\",\"pingCountdown\":%u,\"sensorAvailable\":%s,\"temperature\":%.1f,\"humidity\":%.1f,\"powerLedLevel\":%s,\"powerLedState\":\"%s\",\"pcPowerState\":\"unknown\"}",
                 context->auth->is_configured() ? "true" : "false",
                 context->wifi->is_station_connected() ? "connected" : "disconnected",
                 escaped_ssid, ip, ping_target, reachability,
                 static_cast<unsigned>(context->reachability->seconds_until_next_probe()),
                 sensor_available ? "true" : "false", temperature, humidity,
-                context->power_led->level() ? "true" : "false");
+                context->power_led->level() ? "true" : "false", power_led_state);
   return send_json(request, body);
 }
 

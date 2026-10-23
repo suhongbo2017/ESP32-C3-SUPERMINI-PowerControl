@@ -2,6 +2,7 @@
 
 #include "esp_err.h"
 
+#include "cloud_client.hpp"
 #include "local_auth.hpp"
 #include "reachability_monitor.hpp"
 #include "wifi_manager.hpp"

@@ -16,6 +16,27 @@ constexpr char kTag[] = "maintenance";
 LocalAuth* g_auth = nullptr;
 WifiManager* g_wifi = nullptr;
 ReachabilityMonitor* g_reachability = nullptr;
+esp_err_t read_hidden(const char* prompt, char* output, size_t capacity);
+void clear_secret(char* value, size_t capacity);
+
+int cloud_config_command(int argc, char**) {
+  if (argc != 1) {
+    std::fprintf(stderr, "usage: cloud-config\\n");
+    return 2;
+  }
+  char url[192]{}, device_id[65]{}, credential[129]{};
+  esp_err_t err = read_hidden("Cloud HTTPS URL: ", url, sizeof(url));
+  if (err == ESP_OK) err = read_hidden("Device ID: ", device_id, sizeof(device_id));
+  if (err == ESP_OK) err = read_hidden("Device credential: ", credential, sizeof(credential));
+  if (err == ESP_OK) err = CloudClient::configure(url, device_id, credential);
+  clear_secret(credential, sizeof(credential));
+  if (err != ESP_OK) {
+    std::fprintf(stderr, "cloud configuration failed: %s\\n", esp_err_to_name(err));
+    return 1;
+  }
+  std::printf("cloud configuration stored; reboot device to start client\\n");
+  return 0;
+}
 
 esp_err_t read_hidden(const char* prompt, char* output, size_t capacity) {
   if (output == nullptr || capacity < 2) return ESP_ERR_INVALID_ARG;
@@ -149,6 +170,13 @@ esp_err_t MaintenanceConsole::start(LocalAuth* auth, WifiManager* wifi,
   wifi_cmd.func = &wifi_config_command;
   ESP_RETURN_ON_ERROR(esp_console_cmd_register(&wifi_cmd), kTag,
                       "register wifi-config failed");
+
+  esp_console_cmd_t cloud_cmd{};
+  cloud_cmd.command = "cloud-config";
+  cloud_cmd.help = "store HTTPS cloud URL, device ID and credential";
+  cloud_cmd.func = &cloud_config_command;
+  ESP_RETURN_ON_ERROR(esp_console_cmd_register(&cloud_cmd), kTag,
+                      "register cloud-config failed");
 
   esp_console_cmd_t ping_cmd{};
   ping_cmd.command = "ping-target";

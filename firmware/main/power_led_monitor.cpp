@@ -11,6 +11,7 @@ constexpr char kTag[] = "power-led";
 constexpr gpio_num_t kGpio = GPIO_NUM_0;
 constexpr TickType_t kSampleInterval = pdMS_TO_TICKS(100);
 constexpr int kSamples = 10;
+constexpr int kBlinkTransitions = 2;
 }  // namespace
 
 esp_err_t PowerLedMonitor::start() {
@@ -34,13 +35,22 @@ void PowerLedMonitor::task_entry(void* arg) {
 }
 
 void PowerLedMonitor::task_loop() {
+  bool previous = gpio_get_level(kGpio) != 0;
   while (true) {
-    int high_count = 0;
-    for (int i = 0; i < kSamples; ++i) {
-      high_count += gpio_get_level(kGpio) != 0 ? 1 : 0;
+    int high_count = previous ? 1 : 0;
+    int transitions = 0;
+    for (int i = 1; i < kSamples; ++i) {
       vTaskDelay(kSampleInterval);
+      const bool current = gpio_get_level(kGpio) != 0;
+      high_count += current ? 1 : 0;
+      if (current != previous) ++transitions;
+      previous = current;
     }
-    level_.store(high_count >= (kSamples / 2));
+    const bool level = high_count >= (kSamples / 2);
+    level_.store(level);
+    state_.store(transitions >= kBlinkTransitions
+                     ? PowerLedState::kBlinking
+                     : (level ? PowerLedState::kHigh : PowerLedState::kLow));
   }
 }
 
