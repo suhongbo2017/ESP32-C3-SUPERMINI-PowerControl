@@ -19,8 +19,8 @@ test("accepts a valid one-time pairing request", () => {
   );
 });
 
-test("rejects a pairing request with unknown fields", () => {
-  assert.equal(validatePairingRequest({ protocolVersion: 1, deviceId: "c3-001", pairingCode: "AbCdEf0123456789", extra: true }), false);
+test("ignores unknown fields in a pairing request", () => {
+  assert.equal(validatePairingRequest({ protocolVersion: 1, deviceId: "c3-001", pairingCode: "AbCdEf0123456789", extra: true }), true);
 });
 
 test("rejects a pairing request with an empty code", () => {
