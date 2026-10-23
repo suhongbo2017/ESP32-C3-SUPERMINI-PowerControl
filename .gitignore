@@ -1,0 +1,8 @@
+cloud/node_modules/
+cloud/dist/
+firmware/build/
+firmware/test/build/
+firmware/test/build-ninja/
+firmware/sdkconfig
+firmware/sdkconfig.old
+*.log

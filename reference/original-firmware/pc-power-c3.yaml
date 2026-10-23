@@ -1,0 +1,240 @@
+# ============================================================================
+# ESP32-C3 SuperMini —— 机箱电源键短按控制器 (ESPHome)
+#
+# 快速开始:
+#   cp secrets.yaml.example secrets.yaml   # 然后填入自己的密码/密钥
+#   esphome config pc-power-c3.yaml        # 语法检查
+#   esphome run pc-power-c3.yaml           # 首次 USB 烧录，之后走 OTA
+#
+# 硬件接线 (务必先看 README 的"硬件安全"一节):
+#   GPIO1 --[220~330Ω]-- 光耦 IN+
+#   GPIO1 --[10kΩ]------ GND          <- 必须, 防止上电瞬间误触发
+#   GND   -------------- 光耦 IN-
+#   光耦 S1/S2 --------- 主板 PWR_SW 两针
+# ============================================================================
+
+substitutions:
+  device_name: pc-power-c3
+  friendly_name: PC Power C3
+  pulse_ms: 300ms          # 电源键短按持续时间
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  comment: "机箱电源键脉冲控制器"
+
+esp32:
+  board: esp32-c3-devkitm-1
+  variant: esp32c3
+  framework:
+    type: esp-idf        # C3 推荐 esp-idf；如日后需要 Arduino 生态可改成 arduino
+
+logger:
+  level: DEBUG
+  # SuperMini 的 USB-C 直连芯片自带的 USB-Serial-JTAG，无需 CH340
+  hardware_uart: USB_SERIAL_JTAG
+
+# ---------------------------------------------------------------------------
+# 接入 Home Assistant 用。不需要 HA 时整段删掉即可（web_server 仍然可用）。
+# 密钥生成: openssl rand -base64 32
+# ---------------------------------------------------------------------------
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# 首次上电只启动备用 AP；通过 captive portal/Web Server 配置家庭 2.4GHz Wi-Fi。
+wifi:
+  networks: []
+  ap:
+    ssid: "PC-Power-C3"
+    ap_timeout: 0s
+
+time:
+  - platform: sntp
+    id: device_time
+    servers:
+      - time.google.com
+      - pool.ntp.org
+
+captive_portal:
+
+web_server:
+  port: 80
+  version: 2             # 使用内置资源，独立 AP 模式下无需外网
+  auth:
+    username: admin
+    password: !secret web_password
+
+safe_mode:                 # 固件刷坏时自动进安全模式，可再次 OTA 救援
+
+# ---------------------------------------------------------------------------
+# 云端 MQTT 控制通道
+# 设备只向公网 MQTT/TLS 发起出站连接；手机端不会接触这些凭据。
+# ---------------------------------------------------------------------------
+globals:
+  - id: last_command_id
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
+mqtt:
+  broker: !secret mqtt_host
+  port: 8883
+  username: !secret mqtt_username
+  password: !secret mqtt_password
+  client_id: pc-power-c3-001
+  topic_prefix: pc-power-c3-001
+  discovery: false
+  certificate_authority: |
+    -----BEGIN CERTIFICATE-----
+    MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
+    TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
+    cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4
+    WhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu
+    ZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY
+    MTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc
+    h77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+
+    0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U
+    A5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW
+    T8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH
+    B5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC
+    B5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv
+    KBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn
+    OlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn
+    jh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw
+    qHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI
+    rU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV
+    HRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq
+    hkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL
+    ubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ
+    3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK
+    NFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5
+    ORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur
+    TkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdC
+    jNPElpzVmbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVc
+    oyi3B43njTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq
+    4RgqsahDYVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPA
+    mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d
+    emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
+    -----END CERTIFICATE-----
+  birth_message:
+    topic: pc-power-c3-001/status/online
+    payload: '{"online":true}'
+    qos: 1
+    retain: true
+  will_message:
+    topic: pc-power-c3-001/status/offline
+    payload: '{"online":false}'
+    qos: 1
+    retain: true
+  shutdown_message:
+    topic: pc-power-c3-001/status/offline
+    payload: '{"online":false}'
+    qos: 1
+    retain: true
+  on_json_message:
+    - topic: pc-power-c3-001/commands/power-press
+      qos: 1
+      then:
+        - if:
+            condition:
+              lambda: 'return !id(pwr_sw).state && x["kind"] == "power_press" && x["commandId"].is<const char*>();'
+            then:
+              - lambda: 'id(last_command_id) = x["commandId"].as<std::string>();'
+              - mqtt.publish_json:
+                  topic: pc-power-c3-001/events/command-ack
+                  qos: 1
+                  payload: |-
+                    root["commandId"] = id(last_command_id);
+                    root["status"] = "accepted";
+              - switch.turn_on: pwr_sw
+
+# ===========================================================================
+# 核心：电源键 300ms 短按脉冲
+# ===========================================================================
+switch:
+  - platform: gpio
+    id: pwr_sw
+    name: "${friendly_name} 电源键脉冲"
+    icon: mdi:power
+    pin: GPIO1
+    # 上电/复位/OTA 期间强制输出低电平，与旧固件的 safe state 一致
+    restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - delay: ${pulse_ms}     # ESPHome 的 delay 是非阻塞的(set_timeout)
+      - switch.turn_off: pwr_sw
+      - if:
+          condition:
+            lambda: 'return !id(last_command_id).empty();'
+          then:
+            - mqtt.publish_json:
+                topic: pc-power-c3-001/events/command-ack
+                qos: 1
+                payload: |-
+                  root["commandId"] = id(last_command_id);
+                  root["status"] = "executed";
+            - lambda: 'id(last_command_id).clear();'
+    # 重复触发保护: GPIO switch 已 ON 时再次 turn_on 会被忽略，
+    # 因此连点不会叠加出长按，行为与旧固件的 "pulse_rejected_busy" 等价。
+
+button:
+  - platform: template
+    name: "${friendly_name} 电源键短按"
+    icon: mdi:power-cycle
+    on_press:
+      - switch.turn_on: pwr_sw
+
+  - platform: safe_mode
+    name: "${friendly_name} 进入 Safe Mode"
+
+  - platform: restart
+    name: "${friendly_name} 重启"
+
+# ===========================================================================
+# 以下为 README 里规划的第二阶段功能，接线完成后再逐条取消注释
+# ===========================================================================
+
+# --- PWR-LED: 用光耦/分压读主板电源指示灯，判断 PC 是否真的开机 ---
+# binary_sensor:
+#   - platform: gpio
+#     name: "${friendly_name} PC 电源指示灯"
+#     pin:
+#       number: GPIO3          # 按实际接线修改
+#       mode: { input: true, pulldown: true }
+#     # invert: true           # 视光耦接法决定是否需要反相
+#     filters:
+#       - delayed_off: 1s      # 去抖: 忽略硬盘灯式的短暂闪烁
+
+# --- MQTT: 不用 HA、但要接 MQTT 时启用 ---
+# mqtt:
+#   broker: !secret mqtt_host
+#   username: !secret mqtt_username
+#   password: !secret mqtt_password
+#   discovery: true
+
+# --- 温湿度传感器: 例如 SHT3x (I2C) ---
+# 注意: 避开 GPIO8(板载 LED)、GPIO9(BOOT 按键/strapping)
+# i2c:
+#   sda: GPIO4
+#   scl: GPIO5
+#   scan: true
+# sensor:
+#   - platform: sht3xd
+#     address: 0x44
+#     temperature:
+#       name: "${friendly_name} 机箱温度"
+#     humidity:
+#       name: "${friendly_name} 机箱湿度"
+#     update_interval: 60s
+
+# --- Ping: 判断 PC 是否在网上（新版 ESPHome 有 ping 二进制传感器）---
+# binary_sensor:
+#   - platform: ping
+#     name: "${friendly_name} PC 在线"
+#     host: 192.168.1.100
+#     count: 3
+#     update_interval: 30s

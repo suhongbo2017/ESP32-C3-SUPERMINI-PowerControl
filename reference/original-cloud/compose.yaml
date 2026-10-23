@@ -1,0 +1,63 @@
+name: pc-power-cloud
+
+services:
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      PORT: 8310
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pcpower}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-pcpower}
+      MQTT_URL: mqtts://mqtt.19831018.xyz:8883
+      MQTT_USERNAME: ${MQTT_APP_USERNAME:-cloudapp}
+      MQTT_PASSWORD: ${MQTT_APP_PASSWORD:?Set MQTT_APP_PASSWORD in cloud/.env}
+      MQTT_TLS_SERVERNAME: mqtt.19831018.xyz
+    ports:
+      - "127.0.0.1:8310:8310"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    networks:
+      - backend
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pcpower}
+      POSTGRES_USER: ${POSTGRES_USER:-pcpower}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in cloud/.env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pcpower} -d ${POSTGRES_DB:-pcpower}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/passwords:/mosquitto/config/passwords:ro
+      - ./mosquitto/acl:/mosquitto/config/acl:ro
+      - ./mosquitto/certs:/mosquitto/config/certs:ro
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    ports:
+      - "8883:8883"
+    networks:
+      - backend
+
+volumes:
+  postgres_data:
+
+networks:
+  backend:
+    name: pc-power-cloud-backend
+    driver: bridge

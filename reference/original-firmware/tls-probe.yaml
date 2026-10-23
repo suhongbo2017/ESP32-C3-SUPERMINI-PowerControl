@@ -1,0 +1,29 @@
+esphome:
+  name: tls-probe
+  includes:
+    - tls_probe.h
+  on_boot:
+    priority: -100
+    then:
+      - lambda: 'tls_probe::start();'
+
+esp32:
+  board: esp32-c3-devkitm-1
+  variant: esp32c3
+  framework:
+    type: esp-idf
+
+logger:
+  level: VERY_VERBOSE
+  hardware_uart: USB_SERIAL_JTAG
+
+wifi:
+  networks: []
+  ap:
+    ssid: "PC-Power-C3"
+    ap_timeout: 0s
+
+  # Keep the existing station credentials in NVS when this probe is flashed.
+  reboot_timeout: 0s
+
+captive_portal:
