@@ -3,6 +3,7 @@
 #include "esp_err.h"
 #include "esp_http_server.h"
 
+#include "cloud_client.hpp"
 #include "local_auth.hpp"
 #include "power_actuator.hpp"
 #include "reachability_monitor.hpp"
@@ -16,7 +17,8 @@ class LocalServer {
  public:
   esp_err_t start(LocalAuth* auth, PowerActuator* actuator,
                   ReachabilityMonitor* reachability, WifiManager* wifi,
-                  EnvironmentSensor* environment, PowerLedMonitor* power_led);
+                  EnvironmentSensor* environment, PowerLedMonitor* power_led,
+                  CloudClient* cloud);
   esp_err_t start_setup(WifiManager* wifi);
   bool is_started() const { return server_ != nullptr; }
   bool is_setup_started() const { return setup_server_ != nullptr; }
@@ -37,6 +39,7 @@ class LocalServer {
   static esp_err_t local_config_handler(httpd_req_t* request);
   static esp_err_t password_handler(httpd_req_t* request);
   static esp_err_t wifi_handler(httpd_req_t* request);
+  static esp_err_t cloud_config_handler(httpd_req_t* request);
   static esp_err_t ping_handler(httpd_req_t* request);
   static esp_err_t status_handler(httpd_req_t* request);
   static esp_err_t power_press_handler(httpd_req_t* request);

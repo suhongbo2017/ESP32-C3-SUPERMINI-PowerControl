@@ -60,7 +60,8 @@ extern "C" void app_main() {
                                            &g_reachability_monitor,
                                            &g_wifi_manager,
                                            &g_environment_sensor,
-                                           &g_power_led_monitor));
+                                           &g_power_led_monitor,
+                                           &g_cloud_client));
     } else if (!station_available && g_local_server.is_started()) {
       g_local_server.stop();
       ESP_LOGW(kTag, "local HTTP control stopped; station/auth unavailable");

@@ -9,6 +9,7 @@ namespace pc_power {
 class CloudClient {
  public:
   esp_err_t start(WifiManager* wifi, PowerActuator* actuator);
+  bool is_configured() const { return configured_; }
   static esp_err_t configure(const char* url, const char* device_id, const char* credential);
 
  private:
@@ -16,6 +17,8 @@ class CloudClient {
   void task_loop();
   bool load_config();
   bool poll_once();
+  volatile bool reload_requested_ = false;
+  bool configured_ = false;
 
   WifiManager* wifi_ = nullptr;
   PowerActuator* actuator_ = nullptr;

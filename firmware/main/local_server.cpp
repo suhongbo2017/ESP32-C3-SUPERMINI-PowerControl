@@ -19,6 +19,7 @@ struct ServerContext {
   WifiManager* wifi;
   EnvironmentSensor* environment;
   PowerLedMonitor* power_led;
+  CloudClient* cloud;
 };
 
 struct SetupContext {
@@ -116,22 +117,23 @@ esp_err_t LocalServer::start_setup(WifiManager* wifi) {
 esp_err_t LocalServer::start(LocalAuth* auth, PowerActuator* actuator,
                              ReachabilityMonitor* reachability,
                              WifiManager* wifi, EnvironmentSensor* environment,
-                             PowerLedMonitor* power_led) {
+                             PowerLedMonitor* power_led, CloudClient* cloud) {
   if (auth == nullptr || actuator == nullptr || reachability == nullptr ||
       wifi == nullptr || environment == nullptr || power_led == nullptr ||
+      cloud == nullptr ||
       server_ != nullptr) {
     return ESP_ERR_INVALID_ARG;
   }
 
   auto* context = new ServerContext{auth, actuator, reachability, wifi,
-                                     environment, power_led};
+                                     environment, power_led, cloud};
   if (context == nullptr) {
     return ESP_ERR_NO_MEM;
   }
 
   context_ = context;
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-  config.max_uri_handlers = 9;
+  config.max_uri_handlers = 10;
   esp_err_t err = httpd_start(&server_, &config);
   if (err != ESP_OK) {
     delete context;
@@ -215,6 +217,20 @@ esp_err_t LocalServer::start(LocalAuth* auth, PowerActuator* actuator,
   wifi_uri.handler = &LocalServer::wifi_handler;
   wifi_uri.user_ctx = context;
   err = httpd_register_uri_handler(server_, &wifi_uri);
+  if (err != ESP_OK) {
+    httpd_stop(server_);
+    server_ = nullptr;
+    delete context;
+    context_ = nullptr;
+    return err;
+  }
+
+  httpd_uri_t cloud_uri{};
+  cloud_uri.uri = "/api/local/cloud";
+  cloud_uri.method = HTTP_POST;
+  cloud_uri.handler = &LocalServer::cloud_config_handler;
+  cloud_uri.user_ctx = context;
+  err = httpd_register_uri_handler(server_, &cloud_uri);
   if (err != ESP_OK) {
     httpd_stop(server_);
     server_ = nullptr;
@@ -349,8 +365,10 @@ esp_err_t LocalServer::setup_wifi_handler(httpd_req_t* request) {
 esp_err_t LocalServer::settings_page_handler(httpd_req_t* request) {
   auto* context = static_cast<ServerContext*>(request->user_ctx);
   if (!authorize(request, context->auth)) return unauthorized(request);
-  static constexpr char kSettingsPage[] =
-      "<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>设备设置</title><style>body{margin:0;background:#101b20;color:#e8f5f1;font:16px/1.6 system-ui,'Microsoft YaHei',sans-serif}main{max-width:620px;margin:40px auto;padding:0 20px}section{background:#17272b;border:1px solid #2d4949;border-radius:10px;padding:24px;margin:16px 0}h1{font-size:28px;margin:12px 0;color:#fff}h2{font-size:18px;color:#8fffe0}p{color:#a9c2bd}.back{color:#8fffe0;text-decoration:none}label{display:block;margin:14px 0 5px;color:#b9d2cc}input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #55706d;border-radius:6px;background:#0e181c;color:#fff;font:inherit}button{border:0;border-radius:6px;padding:12px 16px;background:#25b99a;color:#06221e;font:inherit;font-weight:700;margin-top:14px;cursor:pointer}.notice{min-height:26px;color:#8fffe0}</style></head><body><main><a class=back href=\"/\">← 返回设备首页</a><h1>设备设置</h1><p>修改配置后设备可能短暂断开当前网络。</p><section><h2>Wi-Fi 配置</h2><form id=wifi><label>Wi-Fi 名称</label><input name=ssid maxlength=32 required autocomplete=off><label>Wi-Fi 密码</label><input name=password type=password minlength=8 maxlength=63 required autocomplete=new-password><button>保存并重新连接</button></form></section><section><h2>本地登录密码</h2><form id=password><label>新密码（至少 12 位）</label><input name=password type=password minlength=12 maxlength=63 required autocomplete=new-password><button>更新密码</button></form></section><p class=notice id=notice></p></main><script>const n=document.getElementById('notice');async function send(form,url,msg){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(form))});n.textContent=r.ok?msg:'操作失败：'+await r.text();if(r.ok)form.reset()}document.getElementById('wifi').onsubmit=e=>{e.preventDefault();send(e.target,'/api/local/wifi','Wi-Fi 配置已保存，设备正在重新连接')};document.getElementById('password').onsubmit=e=>{e.preventDefault();send(e.target,'/api/local/password','登录密码已更新，请使用新密码重新登录')};</script></body></html>";
+  const char* cloud_state = context->cloud->is_configured() ? "已配置" : "未配置";
+  static char kSettingsPage[5200];
+  std::snprintf(kSettingsPage, sizeof(kSettingsPage),
+      "<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>设备设置</title><style>body{margin:0;background:#101b20;color:#e8f5f1;font:16px/1.6 system-ui,'Microsoft YaHei',sans-serif}main{max-width:620px;margin:40px auto;padding:0 20px}section{background:#17272b;border:1px solid #2d4949;border-radius:8px;padding:24px;margin:16px 0}h1{font-size:28px;margin:12px 0;color:#fff}h2{font-size:18px;color:#8fffe0}p{color:#a9c2bd}.back{color:#8fffe0;text-decoration:none}label{display:block;margin:14px 0 5px;color:#b9d2cc}input{width:100%%;box-sizing:border-box;padding:12px;border:1px solid #55706d;border-radius:6px;background:#0e181c;color:#fff;font:inherit}button{border:0;border-radius:6px;padding:12px 16px;background:#25b99a;color:#06221e;font:inherit;font-weight:700;margin-top:14px;cursor:pointer}.notice{min-height:26px;color:#8fffe0}</style></head><body><main><a class=back href=\"/\">返回设备首页</a><h1>设备设置</h1><p>修改配置后设备可能短暂断开当前网络。</p><section><h2>Wi-Fi 配置</h2><form id=wifi><label>Wi-Fi 名称</label><input name=ssid maxlength=32 required autocomplete=off><label>Wi-Fi 密码</label><input name=password type=password minlength=8 maxlength=63 required autocomplete=new-password><button>保存并重新连接</button></form></section><section><h2>本地登录密码</h2><form id=password><label>新密码（至少 12 位）</label><input name=password type=password minlength=12 maxlength=63 required autocomplete=new-password><button>更新密码</button></form></section><section><h2>云端连接</h2><p>当前状态：%s。仅支持 HTTPS。新凭据保存后立即生效，替换现有配置。</p><form id=cloud><label>云端 HTTPS 地址</label><input name=url type=url placeholder=\"https://cloud.example.com\" maxlength=191 required autocomplete=url><label>设备 ID</label><input name=deviceId maxlength=64 required autocomplete=off><label>设备凭据</label><input name=credential type=password maxlength=128 required autocomplete=new-password><button>保存云端配置</button></form></section><p class=notice id=notice></p></main><script>const n=document.getElementById('notice');async function send(form,url,msg){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(form))});let text='';try{text=await r.text()}catch(e){}n.textContent=r.ok?msg:'操作失败：'+text;if(r.ok)form.reset()}document.getElementById('wifi').onsubmit=e=>{e.preventDefault();send(e.target,'/api/local/wifi','Wi-Fi 配置已保存，设备正在重新连接')};document.getElementById('password').onsubmit=e=>{e.preventDefault();send(e.target,'/api/local/password','登录密码已更新，请使用新密码重新登录')};document.getElementById('cloud').onsubmit=e=>{e.preventDefault();send(e.target,'/api/local/cloud','云端配置已保存并生效')};</script></body></html>", cloud_state);
   httpd_resp_set_type(request, "text/html; charset=utf-8");
   return httpd_resp_send(request, kSettingsPage, HTTPD_RESP_USE_STRLEN);
 }
@@ -625,6 +643,48 @@ esp_err_t LocalServer::wifi_handler(httpd_req_t* request) {
   std::memset(body, 0, sizeof(body));
   return err == ESP_OK ? send_json(request, "{\"status\":\"reconnecting\"}")
                        : send_json(request, "{\"error\":\"Wi-Fi credentials rejected\"}", 400);
+}
+
+esp_err_t LocalServer::cloud_config_handler(httpd_req_t* request) {
+  auto* context = static_cast<ServerContext*>(request->user_ctx);
+  if (context == nullptr || !authorize(request, context->auth)) return unauthorized(request);
+  constexpr size_t kMaxBody = 512;
+  if (request->content_len <= 0 || request->content_len > kMaxBody)
+    return send_json(request, "{\"error\":\"invalid request\"}", 400);
+  char body[kMaxBody + 1]{};
+  size_t total = 0;
+  while (total < static_cast<size_t>(request->content_len)) {
+    const int n = httpd_req_recv(request, body + total, request->content_len - total);
+    if (n <= 0) { std::memset(body, 0, sizeof(body)); return send_json(request, "{\"error\":\"read failed\"}", 400); }
+    total += n;
+  }
+  char url[192]{}, device_id[65]{}, credential[129]{};
+  bool url_seen = false, id_seen = false, credential_seen = false, valid = true;
+  char* cursor = body;
+  while (valid && cursor != nullptr && *cursor != '\0') {
+    char* next = std::strchr(cursor, '&');
+    if (next != nullptr) *next++ = '\0';
+    char* equals = std::strchr(cursor, '=');
+    if (equals == nullptr) { valid = false; break; }
+    *equals++ = '\0';
+    char* destination = nullptr;
+    size_t capacity = 0;
+    if (std::strcmp(cursor, "url") == 0 && !url_seen) { destination = url; capacity = sizeof(url); url_seen = true; }
+    else if (std::strcmp(cursor, "deviceId") == 0 && !id_seen) { destination = device_id; capacity = sizeof(device_id); id_seen = true; }
+    else if (std::strcmp(cursor, "credential") == 0 && !credential_seen) { destination = credential; capacity = sizeof(credential); credential_seen = true; }
+    else { valid = false; break; }
+    if (!decode_form_component(equals) || std::strlen(equals) >= capacity) { valid = false; break; }
+    std::memcpy(destination, equals, std::strlen(equals) + 1);
+    cursor = next;
+  }
+  valid = valid && url_seen && id_seen && credential_seen;
+  const esp_err_t err = valid ? CloudClient::configure(url, device_id, credential) : ESP_ERR_INVALID_ARG;
+  std::memset(credential, 0, sizeof(credential));
+  std::memset(body, 0, sizeof(body));
+  std::memset(url, 0, sizeof(url));
+  std::memset(device_id, 0, sizeof(device_id));
+  return err == ESP_OK ? send_json(request, "{\"status\":\"saved\"}")
+                       : send_json(request, "{\"error\":\"invalid cloud configuration\"}", 400);
 }
 
 esp_err_t LocalServer::ping_handler(httpd_req_t* request) {

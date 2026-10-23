@@ -16,6 +16,7 @@ namespace {
 constexpr char kTag[] = "cloud-client";
 constexpr char kNamespace[] = "cloud_config";
 constexpr TickType_t kPollInterval = pdMS_TO_TICKS(5000);
+CloudClient* g_client = nullptr;
 
 bool read_string(nvs_handle_t handle, const char* key, char* output, size_t size) {
   size_t length = size;
@@ -42,6 +43,7 @@ esp_err_t CloudClient::configure(const char* url, const char* device_id, const c
   if (err == ESP_OK) err = nvs_set_str(handle, "credential", credential);
   if (err == ESP_OK) err = nvs_commit(handle);
   nvs_close(handle);
+  if (err == ESP_OK && g_client != nullptr) g_client->reload_requested_ = true;
   return err;
 }
 
@@ -49,10 +51,9 @@ esp_err_t CloudClient::start(WifiManager* wifi, PowerActuator* actuator) {
   if (wifi == nullptr || actuator == nullptr || wifi_ == wifi) return ESP_ERR_INVALID_ARG;
   wifi_ = wifi;
   actuator_ = actuator;
-  if (!load_config()) {
-    ESP_LOGI(kTag, "cloud client disabled; no cloud configuration");
-    return ESP_OK;
-  }
+  g_client = this;
+  configured_ = load_config();
+  if (!configured_) ESP_LOGI(kTag, "cloud client waiting for web configuration");
   return xTaskCreate(&task_entry, "cloud-client", 6144, this, 3, nullptr) == pdPASS
              ? ESP_OK
              : ESP_ERR_NO_MEM;
@@ -65,14 +66,21 @@ bool CloudClient::load_config() {
                      read_string(handle, "device_id", device_id_, sizeof(device_id_)) &&
                      read_string(handle, "credential", credential_, sizeof(credential_));
   nvs_close(handle);
-  return valid && std::strncmp(base_url_, "https://", 8) == 0 && device_id_[0] != '\0' && credential_[0] != '\0';
+  const bool configured = valid && std::strncmp(base_url_, "https://", 8) == 0 && device_id_[0] != '\0' && credential_[0] != '\0';
+  if (!configured) { std::memset(credential_, 0, sizeof(credential_)); }
+  return configured;
 }
 
 void CloudClient::task_entry(void* arg) { static_cast<CloudClient*>(arg)->task_loop(); }
 
 void CloudClient::task_loop() {
   while (true) {
-    if (wifi_->is_station_connected()) poll_once();
+    if (reload_requested_) {
+      reload_requested_ = false;
+      configured_ = load_config();
+      ESP_LOGI(kTag, "configuration %s", configured_ ? "loaded" : "disabled");
+    }
+    if (configured_ && wifi_->is_station_connected()) poll_once();
     vTaskDelay(kPollInterval);
   }
 }
