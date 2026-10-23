@@ -26,6 +26,8 @@ export function validatePairingRequest(value: unknown): value is {
   pairingCode: string;
 } {
   if (!isRecord(value) || !hasProtocolVersion(value) || !hasDeviceId(value)) return false;
+  const keys = Object.keys(value).sort().join(",");
+  if (keys !== "deviceId,pairingCode,protocolVersion") return false;
   return typeof value.pairingCode === "string" && /^[A-Za-z0-9]{16,64}$/.test(value.pairingCode);
 }
 
