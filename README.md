@@ -1,6 +1,10 @@
 # ESP32-C3 PC Power Controller
-
+成本十多元搭建远程开关机功能
 ESP32-C3 电脑电源控制器，提供本地网页控制、云端 HTTPS 远程控制和设备诊断。
+<img width="1594" height="1131" alt="image" src="https://github.com/user-attachments/assets/301f02eb-7002-4606-897d-82bbeb09122b" />
+
+<img width="1200" height="929" alt="image" src="https://github.com/user-attachments/assets/9b2825a7-5067-4f8d-9173-3fa6100cef78" />
+
 
 ## 当前能力
 
