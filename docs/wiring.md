@@ -94,7 +94,7 @@ ESP32 GPIO1 ──> 限流电阻 ──> 输出光耦 LED 输入侧 ──> ESP3
 
 ## AHT25 接线
 
-AHT25 使用 I2C：
+代码已确认 AHT25 使用 I2C 控制器 `I2C_NUM_0`，7-bit 地址为 `0x38`，SDA=GPIO4、SCL=GPIO5，速率为 100 kHz。AHT25 使用 I2C：
 
 ```text
 ESP32 3V3  ──> AHT25 VCC
@@ -105,7 +105,7 @@ ESP32 SCL  ──> AHT25 SCL
 
 SDA 和 SCL 必须有适合 3.3 V 的上拉。若 AHT25 模块已经集成上拉，不要重复并联过多上拉电阻。AHT25 模块不得使用超过 ESP32 GPIO 允许范围的逻辑电平。
 
-当前具体 SDA/SCL GPIO 没有在本文件中硬编码，应以 `environment_sensor.cpp` 和开发板原理图为准；修改引脚后必须同步更新固件配置和现场接线记录。
+GPIO4/GPIO5 已由 `environment_sensor.cpp` 硬编码确认；开发板的具体物理排针位置仍应以开发板丝印和原理图为准。修改引脚后必须同步更新固件配置和现场接线记录。
 
 ## 首次通电检查顺序
 

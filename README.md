@@ -30,6 +30,7 @@ ESP32-C3 电脑电源控制器，提供本地网页控制、云端 HTTPS 远程�
 - `docs/architecture.md`：系统架构和数据流。
 - `docs/wiring.md`：GPIO0/GPIO1、PLED/PWR_SW 光耦和 AHT25 接线说明。
 - `docs/operations.md`：本地开发、测试、部署和现场验证。
+- `docs/project-manual.md`：完整项目手册，包含引脚定义、接线、使用、端点、架构、部署、流程和开发进度。
 - `docs/adr/`：重要技术决策记录。
 - `reference/`：旧项目和原始资料，仅供调查，不作为当前实现规范。
 
