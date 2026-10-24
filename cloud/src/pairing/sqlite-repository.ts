@@ -3,7 +3,8 @@ import type { Database, SqlJsStatic } from "sql.js";
 import type { PairingRepository } from "./repository.js";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { CommandRecord, DeviceRecord, PairingCodeRecord } from "./repository.js";
+import type { CommandRecord, DeviceDiagnostics, DeviceRecord, PairingCodeRecord } from "./repository.js";
+import type { DashboardUser } from "../auth.js";
 
 type AuditEvent = { kind: string; deviceId?: string; occurredAt: string };
 
@@ -60,11 +61,54 @@ export class SqlitePairingRepository implements PairingRepository {
 
   findDevice(deviceId: string): DeviceRecord | null {
     const row = this.one("SELECT device_id, credential_hash, paired_at, revoked_at, last_seen_at FROM devices WHERE device_id = ?", [deviceId]);
-    return row ? { deviceId: String(row.device_id), credentialHash: String(row.credential_hash), pairedAt: String(row.paired_at), revokedAt: row.revoked_at === null ? null : String(row.revoked_at), lastSeenAt: row.last_seen_at === null ? null : String(row.last_seen_at) } : null;
+    return row ? { deviceId: String(row.device_id), credentialHash: String(row.credential_hash), pairedAt: String(row.paired_at), revokedAt: row.revoked_at === null ? null : String(row.revoked_at), lastSeenAt: row.last_seen_at === null ? null : String(row.last_seen_at), diagnostics: this.diagnosticsFromRow(row) } : null;
   }
 
-  markDeviceSeen(deviceId: string, seenAt: string): boolean {
-    this.db.run("UPDATE devices SET last_seen_at = ? WHERE device_id = ? AND revoked_at IS NULL", [seenAt, deviceId]);
+  listDevices(): DeviceRecord[] {
+    return this.all("SELECT device_id, credential_hash, paired_at, revoked_at, last_seen_at, diagnostics_json FROM devices ORDER BY device_id", []).map((row) => ({
+      deviceId: String(row.device_id), credentialHash: String(row.credential_hash), pairedAt: String(row.paired_at),
+      revokedAt: row.revoked_at === null ? null : String(row.revoked_at), lastSeenAt: row.last_seen_at === null ? null : String(row.last_seen_at),
+      diagnostics: this.diagnosticsFromRow(row),
+    }));
+  }
+
+  findUser(username: string): DashboardUser | null {
+    const row = this.one("SELECT username, password_hash, enabled, created_at, updated_at FROM dashboard_users WHERE username = ?", [username]);
+    return row ? { username: String(row.username), passwordHash: String(row.password_hash), enabled: Boolean(row.enabled), createdAt: String(row.created_at), updatedAt: String(row.updated_at) } : null;
+  }
+
+  listUsers(): Array<Omit<DashboardUser, "passwordHash">> {
+    return this.all("SELECT username, enabled, created_at, updated_at FROM dashboard_users ORDER BY username", []).map((row) => ({ username: String(row.username), enabled: Boolean(row.enabled), createdAt: String(row.created_at), updatedAt: String(row.updated_at) }));
+  }
+
+  upsertUser(user: DashboardUser): void {
+    this.db.run("INSERT INTO dashboard_users(username, password_hash, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(username) DO UPDATE SET password_hash=excluded.password_hash, enabled=excluded.enabled, updated_at=excluded.updated_at", [user.username, user.passwordHash, user.enabled ? 1 : 0, user.createdAt, user.updatedAt]);
+    this.persist();
+  }
+
+  setUserEnabled(username: string, enabled: boolean, updatedAt: string): boolean {
+    this.db.run("UPDATE dashboard_users SET enabled = ?, updated_at = ? WHERE username = ?", [enabled ? 1 : 0, updatedAt, username]);
+    const changed = this.db.getRowsModified() === 1;
+    if (changed) this.persist();
+    return changed;
+  }
+
+  deleteUser(username: string): boolean {
+    this.db.run("DELETE FROM dashboard_users WHERE username = ?", [username]);
+    const changed = this.db.getRowsModified() === 1;
+    if (changed) this.persist();
+    return changed;
+  }
+
+  listCommands(deviceId?: string, limit = 50): CommandRecord[] {
+    const rows = deviceId
+      ? this.all("SELECT * FROM commands WHERE device_id = ? ORDER BY issued_at DESC LIMIT ?", [deviceId, String(limit)])
+      : this.all("SELECT * FROM commands ORDER BY issued_at DESC LIMIT ?", [String(limit)]);
+    return rows.map((row) => this.commandFromRow(row)!).filter(Boolean);
+  }
+
+  markDeviceSeen(deviceId: string, seenAt: string, diagnostics?: DeviceDiagnostics): boolean {
+    this.db.run("UPDATE devices SET last_seen_at = ?, diagnostics_json = ? WHERE device_id = ? AND revoked_at IS NULL", [seenAt, diagnostics ? JSON.stringify(diagnostics) : null, deviceId]);
     const changed = this.db.getRowsModified() === 1;
     if (changed) this.persist();
     return changed;
@@ -124,12 +168,19 @@ export class SqlitePairingRepository implements PairingRepository {
   private migrate(): void {
     this.db.run(`CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS pairing_codes (id TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL, used_at TEXT, created_at TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS devices (device_id TEXT PRIMARY KEY, credential_hash TEXT NOT NULL, paired_at TEXT NOT NULL, revoked_at TEXT, last_seen_at TEXT);
+      CREATE TABLE IF NOT EXISTS devices (device_id TEXT PRIMARY KEY, credential_hash TEXT NOT NULL, paired_at TEXT NOT NULL, revoked_at TEXT, last_seen_at TEXT, diagnostics_json TEXT);
       CREATE TABLE IF NOT EXISTS commands (command_id TEXT PRIMARY KEY, device_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, status TEXT NOT NULL, issued_at TEXT NOT NULL, expires_at TEXT NOT NULL, claimed_at TEXT, completed_at TEXT, error_code TEXT, UNIQUE(device_id, idempotency_key));
       CREATE TABLE IF NOT EXISTS audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, device_id TEXT, occurred_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS dashboard_users (username TEXT PRIMARY KEY, password_hash TEXT NOT NULL, enabled INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (1, datetime('now'));`);
     try { this.db.run("ALTER TABLE devices ADD COLUMN last_seen_at TEXT"); } catch { /* existing database already migrated */ }
+    try { this.db.run("ALTER TABLE devices ADD COLUMN diagnostics_json TEXT"); } catch { /* existing database already migrated */ }
     this.persist();
+  }
+
+  private diagnosticsFromRow(row: Record<string, unknown>): DeviceDiagnostics | null {
+    if (typeof row.diagnostics_json !== "string") return null;
+    try { return JSON.parse(row.diagnostics_json) as DeviceDiagnostics; } catch { return null; }
   }
 
   private commandFromRow(row: Record<string, unknown> | null): CommandRecord | null {

@@ -6,12 +6,26 @@ export type PairingCodeRecord = {
   createdAt: string;
 };
 
+export type DeviceDiagnostics = {
+  reportedAt: string;
+  deviceIp: string;
+  hostIp: string;
+  wifi: "connected" | "disconnected";
+  ssid: string;
+  reachability: "reachable" | "unreachable" | "unknown";
+  sensorAvailable: boolean;
+  temperature: number | null;
+  humidity: number | null;
+  powerLedState: "high" | "low" | "blinking";
+};
+
 export type DeviceRecord = {
   deviceId: string;
   credentialHash: string;
   pairedAt: string;
   revokedAt: string | null;
   lastSeenAt?: string | null;
+  diagnostics?: DeviceDiagnostics | null;
 };
 
 export type CommandRecord = {
@@ -31,9 +45,11 @@ export interface PairingRepository {
   findActivePairingCodes(now: string): PairingCodeRecord[];
   completePairing(codeId: string, usedAt: string, device: DeviceRecord): boolean;
   findDevice(deviceId: string): DeviceRecord | null;
+  listDevices(): DeviceRecord[];
+  listCommands(deviceId?: string, limit?: number): CommandRecord[];
   revokeDevice(deviceId: string, revokedAt: string): boolean;
   recordAudit(event: { kind: string; deviceId?: string; occurredAt: string }): void;
-  markDeviceSeen(deviceId: string, seenAt: string): boolean;
+  markDeviceSeen(deviceId: string, seenAt: string, diagnostics?: DeviceDiagnostics): boolean;
   createCommand(record: CommandRecord): boolean;
   findCommandByIdempotency(deviceId: string, idempotencyKey: string): CommandRecord | null;
   claimNextCommand(deviceId: string, now: string): CommandRecord | null;

@@ -50,7 +50,10 @@ extern "C" void app_main() {
   esp_sntp_setservername(0, const_cast<char*>("pool.ntp.org"));
   esp_sntp_init();
   ESP_ERROR_CHECK(g_reachability_monitor.start(&g_wifi_manager));
-  ESP_ERROR_CHECK(g_cloud_client.start(&g_wifi_manager, &g_power_actuator));
+  ESP_ERROR_CHECK(g_cloud_client.start(&g_wifi_manager, &g_power_actuator,
+                                       &g_reachability_monitor,
+                                       &g_environment_sensor,
+                                       &g_power_led_monitor));
   ESP_LOGI(kTag, "startup complete; credentials_configured=%s",
            g_local_auth.is_configured() ? "true" : "false");
   while (true) {

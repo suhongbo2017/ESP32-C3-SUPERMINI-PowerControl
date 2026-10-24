@@ -28,16 +28,26 @@
 
 ### 设备轮询报告
 
+设备通过 `POST /api/device/:deviceId/seen` 上报本地确定的诊断快照。云端只做协议校验、保存和展示，不读取设备 GPIO，也不重新探测 LED 或 Ping。
+
 ```json
 {
   "protocolVersion": 1,
   "deviceId": "c3-001",
   "reportedAt": "2026-10-20T12:00:00.000Z",
-  "reachability": "reachable"
+  "deviceIp": "192.168.1.25",
+  "hostIp": "192.168.1.10",
+  "wifi": "connected",
+  "ssid": "example-wifi",
+  "reachability": "reachable",
+  "sensorAvailable": true,
+  "temperature": 35.2,
+  "humidity": 48.1,
+  "powerLedState": "low"
 }
 ```
 
-`reachability` 只能是 `reachable`、`unreachable` 或 `unknown`。首版不允许在该消息中声明电脑电源状态。
+`reachability` 只能是 `reachable`、`unreachable` 或 `unknown`，由设备本地 Ping 得出；它不能代表电脑电源状态。`powerLedState` 只能是 `high`、`low` 或 `blinking`，由设备在 GPIO0 本地采样窗口内确定。当前硬件约定 `low` 为灯亮、`high` 为灯灭。云端页面只将这些协议值映射为中文文案。
 
 ### 云端下发命令
 

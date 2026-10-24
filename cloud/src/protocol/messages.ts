@@ -3,6 +3,8 @@ export const protocolVersion = 1 as const;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const reachabilityValues = new Set(["reachable", "unreachable", "unknown"]);
+const wifiValues = new Set(["connected", "disconnected"]);
+const ledValues = new Set(["high", "low", "blinking"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -39,6 +41,24 @@ export function validateDevicePoll(value: unknown): value is {
   const keys = Object.keys(value).sort().join(",");
   if (keys !== "deviceId,protocolVersion,reachability,reportedAt") return false;
   return hasIsoDate(value.reportedAt) && typeof value.reachability === "string" && reachabilityValues.has(value.reachability);
+}
+
+export function validateDeviceSnapshot(value: unknown): value is {
+  protocolVersion: 1; deviceId: string; reportedAt: string; deviceIp: string; hostIp: string;
+  wifi: "connected" | "disconnected"; ssid: string; reachability: "reachable" | "unreachable" | "unknown";
+  sensorAvailable: boolean; temperature: number | null; humidity: number | null;
+  powerLedState: "high" | "low" | "blinking";
+} {
+  if (!isRecord(value) || !hasProtocolVersion(value) || !hasDeviceId(value) || !hasIsoDate(value.reportedAt)) return false;
+  return typeof value.deviceIp === "string" && value.deviceIp.length <= 45
+    && typeof value.hostIp === "string" && value.hostIp.length <= 45
+    && typeof value.wifi === "string" && wifiValues.has(value.wifi)
+    && typeof value.ssid === "string" && value.ssid.length <= 32
+    && typeof value.reachability === "string" && reachabilityValues.has(value.reachability)
+    && typeof value.sensorAvailable === "boolean"
+    && (value.temperature === null || (typeof value.temperature === "number" && Number.isFinite(value.temperature)))
+    && (value.humidity === null || (typeof value.humidity === "number" && Number.isFinite(value.humidity)))
+    && typeof value.powerLedState === "string" && ledValues.has(value.powerLedState);
 }
 
 export function validateCommand(value: unknown): value is {

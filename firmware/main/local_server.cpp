@@ -85,6 +85,7 @@ esp_err_t LocalServer::start_setup(WifiManager* wifi) {
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
+  config.stack_size = 12288;
   config.max_uri_handlers = 2;
   esp_err_t err = httpd_start(&setup_server_, &config);
   if (err != ESP_OK) {
@@ -133,6 +134,7 @@ esp_err_t LocalServer::start(LocalAuth* auth, PowerActuator* actuator,
 
   context_ = context;
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+  config.stack_size = 12288;
   config.max_uri_handlers = 10;
   esp_err_t err = httpd_start(&server_, &config);
   if (err != ESP_OK) {
@@ -365,10 +367,10 @@ esp_err_t LocalServer::setup_wifi_handler(httpd_req_t* request) {
 esp_err_t LocalServer::settings_page_handler(httpd_req_t* request) {
   auto* context = static_cast<ServerContext*>(request->user_ctx);
   if (!authorize(request, context->auth)) return unauthorized(request);
-  const char* cloud_state = context->cloud->is_configured() ? "已配置" : "未配置";
-  static char kSettingsPage[5200];
+  const char* cloud_state = context->cloud->is_configured() ? "已配对" : "未配对";
+  static char kSettingsPage[8192];
   std::snprintf(kSettingsPage, sizeof(kSettingsPage),
-      "<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>设备设置</title><style>body{margin:0;background:#101b20;color:#e8f5f1;font:16px/1.6 system-ui,'Microsoft YaHei',sans-serif}main{max-width:620px;margin:40px auto;padding:0 20px}section{background:#17272b;border:1px solid #2d4949;border-radius:8px;padding:24px;margin:16px 0}h1{font-size:28px;margin:12px 0;color:#fff}h2{font-size:18px;color:#8fffe0}p{color:#a9c2bd}.back{color:#8fffe0;text-decoration:none}label{display:block;margin:14px 0 5px;color:#b9d2cc}input{width:100%%;box-sizing:border-box;padding:12px;border:1px solid #55706d;border-radius:6px;background:#0e181c;color:#fff;font:inherit}button{border:0;border-radius:6px;padding:12px 16px;background:#25b99a;color:#06221e;font:inherit;font-weight:700;margin-top:14px;cursor:pointer}.notice{min-height:26px;color:#8fffe0}</style></head><body><main><a class=back href=\"/\">返回设备首页</a><h1>设备设置</h1><p>修改配置后设备可能短暂断开当前网络。</p><section><h2>Wi-Fi 配置</h2><form id=wifi><label>Wi-Fi 名称</label><input name=ssid maxlength=32 required autocomplete=off><label>Wi-Fi 密码</label><input name=password type=password minlength=8 maxlength=63 required autocomplete=new-password><button>保存并重新连接</button></form></section><section><h2>本地登录密码</h2><form id=password><label>新密码（至少 12 位）</label><input name=password type=password minlength=12 maxlength=63 required autocomplete=new-password><button>更新密码</button></form></section><section><h2>云端连接</h2><p>当前状态：%s。仅支持 HTTPS。新凭据保存后立即生效，替换现有配置。</p><form id=cloud><label>云端 HTTPS 地址</label><input name=url type=url placeholder=\"https://cloud.example.com\" maxlength=191 required autocomplete=url><label>设备 ID</label><input name=deviceId maxlength=64 required autocomplete=off><label>设备凭据</label><input name=credential type=password maxlength=128 required autocomplete=new-password><button>保存云端配置</button></form></section><p class=notice id=notice></p></main><script>const n=document.getElementById('notice');async function send(form,url,msg){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(form))});let text='';try{text=await r.text()}catch(e){}n.textContent=r.ok?msg:'操作失败：'+text;if(r.ok)form.reset()}document.getElementById('wifi').onsubmit=e=>{e.preventDefault();send(e.target,'/api/local/wifi','Wi-Fi 配置已保存，设备正在重新连接')};document.getElementById('password').onsubmit=e=>{e.preventDefault();send(e.target,'/api/local/password','登录密码已更新，请使用新密码重新登录')};document.getElementById('cloud').onsubmit=e=>{e.preventDefault();send(e.target,'/api/local/cloud','云端配置已保存并生效')};</script></body></html>", cloud_state);
+      "<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>设备设置</title><style>body{margin:0;background:#101b20;color:#e8f5f1;font:16px/1.6 system-ui,'Microsoft YaHei',sans-serif}main{max-width:620px;margin:40px auto;padding:0 20px}section{background:#17272b;border:1px solid #2d4949;border-radius:8px;padding:24px;margin:16px 0}h1{font-size:28px;margin:12px 0;color:#fff}h2{font-size:18px;color:#8fffe0}p{color:#a9c2bd}.back{color:#8fffe0;text-decoration:none}label{display:block;margin:14px 0 5px;color:#b9d2cc}input{width:100%%;box-sizing:border-box;padding:12px;border:1px solid #55706d;border-radius:6px;background:#0e181c;color:#fff;font:inherit}button{border:0;border-radius:6px;padding:12px 16px;background:#25b99a;color:#06221e;font:inherit;font-weight:700;margin-top:14px;cursor:pointer}.notice{min-height:26px;color:#8fffe0}</style></head><body><main><a class=back href=\"/\">返回设备首页</a><h1>设备设置</h1><p>修改配置后设备可能短暂断开当前网络。</p><section><h2>Wi-Fi 配置</h2><form id=wifi><label>Wi-Fi 名称</label><input name=ssid maxlength=32 required autocomplete=off><label>Wi-Fi 密码</label><input name=password type=password minlength=8 maxlength=63 required autocomplete=new-password><button>保存并重新连接</button></form></section><section><h2>本地登录密码</h2><form id=password><label>新密码（至少 12 位）</label><input name=password type=password minlength=12 maxlength=63 required autocomplete=new-password><button>更新密码</button></form></section><section><h2>云端配对</h2><p>当前状态：%s。输入云端地址、设备 ID 和一次性配对码。设备会自动完成配对并保存凭据。</p><form id=cloud method=post action=/api/local/cloud><label>云端 HTTPS 地址</label><input name=url type=url value=\"https://pc.19831018.xyz\" maxlength=191 required autocomplete=url><label>设备 ID</label><input name=deviceId value=\"pc-power-c2d4\" maxlength=64 required autocomplete=off><label>一次性配对码</label><input name=pairingCode type=password minlength=16 maxlength=64 required autocomplete=one-time-code><button>开始配对</button></form></section><p class=notice id=notice></p></main><script>const n=document.getElementById('notice');async function send(form,url,msg){const button=form.querySelector('button');button.disabled=true;n.textContent='正在提交…';try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(form))});const text=await r.text();if(!r.ok)throw Error(text||('HTTP '+r.status));n.textContent=msg;form.reset()}catch(error){n.textContent='提交失败：'+(error.message||'网络错误')}finally{button.disabled=false}}document.getElementById('wifi').onsubmit=e=>{e.preventDefault();send(e.target,'/api/local/wifi','Wi-Fi 配置已保存，设备正在重新连接')};document.getElementById('password').onsubmit=e=>{e.preventDefault();send(e.target,'/api/local/password','登录密码已更新，请使用新密码重新登录')};document.getElementById('cloud').onsubmit=e=>{e.preventDefault();send(e.target,'/api/local/cloud','设备配对成功，云端连接已启用')}</script></body></html>", cloud_state);
   httpd_resp_set_type(request, "text/html; charset=utf-8");
   return httpd_resp_send(request, kSettingsPage, HTTPD_RESP_USE_STRLEN);
 }
@@ -389,9 +391,9 @@ esp_err_t LocalServer::page_handler(httpd_req_t* request) {
       "label{display:block;font-size:13px;color:#415653;margin:10px 0 5px}input{display:block;width:100%;max-width:440px;padding:10px;border:1px solid #bbc9c6;border-radius:4px;font:inherit}"
       "button{border:0;border-radius:4px;padding:10px 14px;background:#167e72;color:white;font:inherit;font-weight:600;cursor:pointer;margin-top:8px}button:hover{background:#11665d}"
       ".power{background:#263837;color:#fff}.power h2{color:#dcebe8}.power button{background:#c85d3d}.muted{color:#657673;font-size:13px;margin:0}"
-      ".tag{display:inline-block;padding:3px 9px;border-radius:20px;background:#dcefeb;color:#12695f;font-size:12px}.button-link{display:inline-block;padding:10px 14px;background:#167e72;color:white;text-decoration:none;border-radius:5px;font-weight:650;margin-top:8px}footer{font-size:12px;color:#71817f;margin:18px 0}"
+      ".tag{display:inline-block;padding:3px 9px;border-radius:20px;background:#dcefeb;color:#12695f;font-size:12px}.lang-link{color:#dcefeb;text-decoration:none;font-size:13px;margin-right:12px}.button-link{display:inline-block;padding:10px 14px;background:#167e72;color:white;text-decoration:none;border-radius:5px;font-weight:650;margin-top:8px}footer{font-size:12px;color:#71817f;margin:18px 0}"
       "@media(max-width:620px){header{padding:18px;align-items:flex-start}main{margin:16px auto;padding:0 12px}.grid{grid-template-columns:1fr;gap:10px}.wide{grid-column:auto}.metrics{grid-template-columns:1fr 1fr}.value{font-size:16px}}"
-      "</style></head><body><header><div><h1>电脑电源控制器</h1><p>本地设备管理</p></div><span class=tag id=\"connection\">正在连接</span></header>"
+      "</style></head><body><header><div><h1>电脑电源控制器</h1><p>本地设备管理</p></div><div><a class=lang-link href=\"/?lang=en\">English</a><span class=tag id=\"connection\">正在连接</span></div></header>"
       "<main><div class=notice id=\"notice\">正在读取设备状态…</div><div class=grid>"
       "<section class=wide><h2><span class=status-icon>▦</span>设备状态</h2><div class=metrics>"
       "<div class=metric><div class=label><span class=status-icon id=\"wifiIcon\">⌁</span>Wi-Fi</div><div class=value id=\"wifiState\">读取中</div></div>"
@@ -399,20 +401,20 @@ esp_err_t LocalServer::page_handler(httpd_req_t* request) {
       "<div class=metric><div class=label><span class=status-icon>⌂</span>设备 IP</div><div class=value id=\"ip\">—</div></div>"
       "<div class=metric><div class=label><span class=status-icon id=\"reachabilityIcon\">⌁</span>Ping 测试</div><div class=value id=\"pingSummary\">等待测试</div><div class=muted>下次测试：<span id=\"pingCountdown\">30</span> 秒</div></div>"
       "<div class=metric><div class=label><span class=status-icon id=\"pcIcon\">⏻</span>电脑电源 LED</div><div class=value glow id=\"pcState\">读取中</div></div>"
-      "<div class=metric><div class=label><span class=\"status-icon off\">☁</span>云端连接</div><div class=value>未配置</div></div>"
+      "<div class=metric><div class=label><span class=\"status-icon off\" id=\"cloudIcon\">☁</span>云端连接</div><div class=value id=\"cloudState\">读取中</div></div>"
       "</div></section>"
       "<section class=power><h2><span class=status-icon>⚡</span>电源控制</h2><p class=muted>操作会真实模拟按下电脑电源键，电脑开关机状态无法由本设备确认。</p>"
       "<button id=\"power\">模拟按下电源键</button><p class=muted id=\"powerCooldown\">每次操作都需要确认</p></section>"
       "<section><h2><span class=status-icon>⌁</span>Ping 目标</h2><p class=muted>设备每 30 秒执行 3 次 Ping。</p><form id=\"ping\"><label>电脑 IPv4 地址</label><input name=ip type=text inputmode=decimal placeholder=\"192.168.1.100\" maxlength=15 pattern=\"([0-9]{1,3}\\.){3}[0-9]{1,3}\" required><button>保存目标地址</button></form><p class=muted>当前目标：<span id=\"pingTarget\">未设置</span></p></section><section><h2><span class=status-icon>♨</span>温湿度</h2><div class=metrics><div class=metric><div class=label>温度</div><div class=value id=\"temperature\">读取中</div></div><div class=metric><div class=label>湿度</div><div class=value id=\"humidity\">读取中</div></div></div></section>"
       "<section class=wide><h2>温湿度曲线</h2><div class=chart-wrap><canvas id=\"environmentChart\"></canvas></div><div class=legend><span class=temp-line>温度 °C</span><span class=humidity-line>湿度 %</span></div><p class=muted>当前浏览器保存最近 2 小时数据；页面关闭期间不会采集新数据。</p></section>"
       "<section><h2><span class=status-icon>⚙</span>设备设置</h2><p class=muted>Wi-Fi 与本地账号密码在独立页面管理。</p><a class=button-link href=\"/settings\">打开设置页面</a></section></div><footer>状态每 5 秒自动刷新。管理连接使用本地 HTTP。</footer></main><script>"
-      "const $=id=>document.getElementById(id),notice=$('notice'),historyKey='pc-power-environment-history-v1',maxAge=2*60*60*1000,maxHistory=1440;let history=[];"
+      "const $=id=>document.getElementById(id),notice=$('notice'),historyKey='pc-power-environment-history-v1',maxAge=2*60*60*1000,maxHistory=1440;let history=[];const english=new URLSearchParams(location.search).get('lang')==='en';const tr=(zh,en)=>english?en:zh;function translatePage(){if(!english)return;document.documentElement.lang='en';document.title='PC Power Controller';const map={'电脑电源控制器':'PC Power Controller','本地设备管理':'Local device management','设备状态':'Device status','当前网络':'Current network','设备 IP':'Device IP','Ping 测试':'Ping test','电脑电源 LED':'PC power LED','云端连接':'Cloud connection','电源控制':'Power control','模拟按下电源键':'Simulate power button press','Ping 目标':'Ping target','电脑 IPv4 地址':'PC IPv4 address','保存目标地址':'Save target address','温湿度':'Temperature and humidity','温度':'Temperature','湿度':'Humidity','温湿度曲线':'Temperature and humidity history','设备设置':'Device settings','打开设置页面':'Open settings','等待测试':'Waiting for test','下次测试：':'Next test:','当前目标：':'Current target:','状态每 5 秒自动刷新。管理连接使用本地 HTTP。':'Status refreshes every 5 seconds. Management uses local HTTP.','正在读取设备状态…':'Reading device status…','操作会真实模拟按下电脑电源键，电脑开关机状态无法由本设备确认。':'This physically simulates pressing the PC power button. This device cannot confirm the PC power state.','每次操作都需要确认':'Confirmation is required for every operation','设备每 30 秒执行 3 次 Ping。':'The device performs three Ping attempts every 30 seconds.','当前浏览器保存最近 2 小时数据；页面关闭期间不会采集新数据。':'This browser stores the last two hours of data; no data is collected while the page is closed.','Wi-Fi 与本地账号密码在独立页面管理。':'Wi-Fi and local account settings are managed on a separate page.'};const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);nodes.forEach(n=>{let value=n.nodeValue;Object.keys(map).forEach(key=>{value=value.split(key).join(map[key])});n.nodeValue=value});const link=document.querySelector('.lang-link');if(link){link.textContent='中文';link.href='/'}}"
       "function pruneHistory(){const cutoff=Date.now()-maxAge;while(history.length&&history[0].time<cutoff)history.shift();if(history.length>maxHistory)history.splice(0,history.length-maxHistory)}function restoreHistory(){try{const saved=JSON.parse(localStorage.getItem(historyKey)||'[]');if(Array.isArray(saved))history=saved.filter(p=>p&&Number.isFinite(p.time)&&Number.isFinite(p.temperature)&&Number.isFinite(p.humidity));}catch(e){history=[]}pruneHistory();drawChart()}function saveHistory(){pruneHistory();try{localStorage.setItem(historyKey,JSON.stringify(history))}catch(e){}}"
       "function drawChart(){const canvas=$('environmentChart'),box=canvas.getBoundingClientRect(),ratio=window.devicePixelRatio||1,w=Math.max(1,box.width),h=Math.max(1,box.height);canvas.width=w*ratio;canvas.height=h*ratio;const ctx=canvas.getContext('2d');ctx.scale(ratio,ratio);ctx.clearRect(0,0,w,h);const pad={l:42,r:42,t:20,b:28},cw=w-pad.l-pad.r,ch=h-pad.t-pad.b;ctx.font='11px system-ui,Microsoft YaHei,sans-serif';ctx.fillStyle='#657673';ctx.textAlign='right';ctx.textBaseline='middle';[50,25,0].forEach((v,i)=>{let y=pad.t+ch*i/2;ctx.fillText(v+'°',pad.l-7,y)});ctx.textAlign='left';[100,50,0].forEach((v,i)=>{let y=pad.t+ch*i/2;ctx.fillText(v+'%',w-pad.r+7,y)});ctx.textAlign='center';ctx.textBaseline='top';if(history.length>0){const age=Math.max(0,Date.now()-history[0].time);ctx.fillText('现在',w-pad.r,h-pad.b+8);ctx.fillText('−'+Math.round(age/60000)+' 分钟',pad.l,h-pad.b+8)}ctx.strokeStyle='#dce4e2';ctx.lineWidth=1;ctx.beginPath();for(let i=0;i<3;i++){let y=pad.t+ch*i/2;ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y)}ctx.stroke();if(history.length<2)return;const draw=(key,color,min,max)=>{ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();history.forEach((p,i)=>{let x=pad.l+cw*i/(history.length-1),y=pad.t+ch*(1-(p[key]-min)/(max-min));i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke()};draw('temperature','#c85d3d',0,50);draw('humidity','#167e72',0,100)}window.addEventListener('resize',drawChart);restoreHistory();"
-      "async function load(){try{let r=await fetch('/api/local/status');if(r.status===401){$('connection').textContent='需要登录';notice.textContent='请使用本地设备账号登录';return}if(!r.ok)throw Error();let s=await r.json();"
-      "$('connection').textContent='设备已连接';$('wifiState').textContent=s.wifi==='connected'?'已连接':'未连接';$('ssid').textContent=s.ssid==='unavailable'?'不可用':s.ssid;$('ip').textContent=s.ip;$('pingTarget').textContent=s.pingTarget||'未设置';$('pingSummary').textContent=(s.pingTarget||'未设置')+'：'+(s.reachability==='reachable'?'可达':s.reachability==='unreachable'?'不可达':'未知');$('pingSummary').className='value '+(s.reachability==='reachable'?'glow':'');$('pingCountdown').textContent=s.pingCountdown;$('temperature').textContent=s.sensorAvailable?s.temperature.toFixed(1)+' °C':'传感器不可用';$('humidity').textContent=s.sensorAvailable?s.humidity.toFixed(1)+' %':'传感器不可用';if(s.sensorAvailable){history.push({time:Date.now(),temperature:s.temperature,humidity:s.humidity});saveHistory();drawChart()}$('pcState').textContent=s.powerLedState==='blinking'?'LED 闪烁（可能为睡眠状态）':s.powerLedLevel?'LED 灯熄灭':'LED 灯亮';notice.textContent='设备状态正常';}catch(e){$('connection').textContent='连接失败';notice.textContent='无法读取设备状态，请检查网络连接';}}"
-      "load();setInterval(load,5000);const power=$('power'),cooldown=$('powerCooldown');let cooling=false;power.onclick=async()=>{if(cooling)return;if(!confirm('即将真实模拟按下电脑电源键一次。若电脑已开机，可能触发关机或睡眠。确认继续？'))return;cooling=true;power.disabled=true;let left=10;cooldown.textContent='操作保护中，请等待 '+left+' 秒';let timer=setInterval(()=>{left--;cooldown.textContent=left>0?'操作保护中，请等待 '+left+' 秒':'请勿连续触发电源键';if(left<=0){clearInterval(timer);if(!power.dataset.requesting){power.disabled=false;cooldown.textContent='可以进行下一次操作';cooling=false}}},1000);power.dataset.requesting='1';try{let r=await fetch('/api/local/power-press',{method:'POST'});notice.textContent=r.ok?'电源键操作已发送':('操作失败：'+await r.text())}catch(e){notice.textContent='请求失败，请检查设备连接'}finally{delete power.dataset.requesting;if(left<=0){power.disabled=false;cooldown.textContent='可以进行下一次操作';cooling=false}}};"
-      "$('ping').onsubmit=async e=>{e.preventDefault();notice.textContent='正在保存 Ping 目标…';let r=await fetch('/api/local/ping-target',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(e.target))});notice.textContent=r.ok?'Ping 目标已保存，设备将在 30 秒周期内执行测试':'Ping 配置失败：'+await r.text();};"
+      "translatePage();async function load(){try{let r=await fetch('/api/local/status');if(r.status===401){$('connection').textContent=tr('需要登录','Login required');notice.textContent=tr('请使用本地设备账号登录','Please log in with the local device account');return}if(!r.ok)throw Error();let s=await r.json();"
+      "$('connection').textContent=tr('设备已连接','Device connected');$('wifiState').textContent=s.wifi==='connected'?tr('已连接','Connected'):tr('未连接','Disconnected');$('ssid').textContent=s.ssid==='unavailable'?tr('不可用','Unavailable'):s.ssid;$('ip').textContent=s.ip;$('pingTarget').textContent=s.pingTarget||tr('未设置','Not set');$('pingSummary').textContent=(s.pingTarget||tr('未设置','Not set'))+'：'+(s.reachability==='reachable'?tr('可达','Reachable'):s.reachability==='unreachable'?tr('不可达','Unreachable'):tr('未知','Unknown'));$('pingSummary').className='value '+(s.reachability==='reachable'?'glow':'');$('pingCountdown').textContent=s.pingCountdown;$('temperature').textContent=s.sensorAvailable?s.temperature.toFixed(1)+' °C':tr('传感器不可用','Sensor unavailable');$('humidity').textContent=s.sensorAvailable?s.humidity.toFixed(1)+' %':tr('传感器不可用','Sensor unavailable');if(s.sensorAvailable){history.push({time:Date.now(),temperature:s.temperature,humidity:s.humidity});saveHistory();drawChart()}$('pcState').textContent=s.powerLedState==='blinking'?tr('LED 闪烁（可能为睡眠状态）','LED blinking (possibly sleep state)'):s.powerLedLevel?tr('LED 灯熄灭','LED off'):tr('LED 灯亮','LED on');$('cloudState').textContent=s.cloudOnline?tr('在线','Online'):s.cloudConfigured?tr('已配置，连接中','Configured, connecting'):tr('未配对','Not paired');$('cloudIcon').className='status-icon '+(s.cloudOnline?'':'off');notice.textContent=tr('设备状态正常','Device status is normal');}catch(e){$('connection').textContent=tr('连接失败','Connection failed');notice.textContent=tr('无法读取设备状态，请检查网络连接','Unable to read device status. Check the network connection.');}}"
+      "load();setInterval(load,5000);const power=$('power'),cooldown=$('powerCooldown');let cooling=false;power.onclick=async()=>{if(cooling)return;if(!confirm(tr('即将真实模拟按下电脑电源键一次。若电脑已开机，可能触发关机或睡眠。确认继续？','This will physically simulate one press of the PC power button. If the PC is on, it may shut down or enter sleep. Continue?')))return;cooling=true;power.disabled=true;let left=10;cooldown.textContent=tr('操作保护中，请等待 ','Protection active, wait ')+left+tr(' 秒',' s');let timer=setInterval(()=>{left--;cooldown.textContent=left>0?tr('操作保护中，请等待 ','Protection active, wait ')+left+tr(' 秒',' s'):tr('请勿连续触发电源键','Do not press the power button repeatedly');if(left<=0){clearInterval(timer);if(!power.dataset.requesting){power.disabled=false;cooldown.textContent=tr('可以进行下一次操作','Ready for the next operation');cooling=false}}},1000);power.dataset.requesting='1';try{let r=await fetch('/api/local/power-press',{method:'POST'});notice.textContent=r.ok?tr('电源键操作已发送','Power button command sent'):tr('操作失败：','Operation failed:')+await r.text()}catch(e){notice.textContent=tr('请求失败，请检查设备连接','Request failed. Check the device connection.')}finally{delete power.dataset.requesting;if(left<=0){power.disabled=false;cooldown.textContent=tr('可以进行下一次操作','Ready for the next operation');cooling=false}}};"
+      "$('ping').onsubmit=async e=>{e.preventDefault();notice.textContent=tr('正在保存 Ping 目标…','Saving Ping target…');let r=await fetch('/api/local/ping-target',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(e.target))});notice.textContent=r.ok?tr('Ping 目标已保存，设备将在 30 秒周期内执行测试','Ping target saved. The device will test it every 30 seconds.'):tr('Ping 配置失败：','Ping configuration failed:')+await r.text();};"
       "</script></body></html>";
   static constexpr char kSetupPage[] =
       "<!doctype html><html lang=zh-CN><head><meta charset=utf-8>"
@@ -535,7 +537,7 @@ esp_err_t LocalServer::status_handler(httpd_req_t* request) {
   float temperature = 0.0f;
   float humidity = 0.0f;
   const bool sensor_available = context->environment->read(&temperature, &humidity);
-  char body[460];
+  char body[1200];
   const char* reachability = "unknown";
   switch (context->reachability->state()) {
     case Reachability::kReachable:
@@ -559,13 +561,15 @@ esp_err_t LocalServer::status_handler(httpd_req_t* request) {
       break;
   }
   std::snprintf(body, sizeof(body),
-                "{\"configured\":%s,\"wifi\":\"%s\",\"ssid\":\"%s\",\"ip\":\"%s\",\"pingTarget\":\"%s\",\"reachability\":\"%s\",\"pingCountdown\":%u,\"sensorAvailable\":%s,\"temperature\":%.1f,\"humidity\":%.1f,\"powerLedLevel\":%s,\"powerLedState\":\"%s\",\"pcPowerState\":\"unknown\"}",
+                "{\"configured\":%s,\"wifi\":\"%s\",\"ssid\":\"%s\",\"ip\":\"%s\",\"pingTarget\":\"%s\",\"reachability\":\"%s\",\"pingCountdown\":%u,\"sensorAvailable\":%s,\"temperature\":%.1f,\"humidity\":%.1f,\"powerLedLevel\":%s,\"powerLedState\":\"%s\",\"pcPowerState\":\"unknown\",\"cloudConfigured\":%s,\"cloudOnline\":%s}",
                 context->auth->is_configured() ? "true" : "false",
                 context->wifi->is_station_connected() ? "connected" : "disconnected",
                 escaped_ssid, ip, ping_target, reachability,
                 static_cast<unsigned>(context->reachability->seconds_until_next_probe()),
                 sensor_available ? "true" : "false", temperature, humidity,
-                context->power_led->level() ? "true" : "false", power_led_state);
+                context->power_led->level() ? "true" : "false", power_led_state,
+                context->cloud->is_configured() ? "true" : "false",
+                context->cloud->is_online() ? "true" : "false");
   return send_json(request, body);
 }
 
@@ -658,8 +662,8 @@ esp_err_t LocalServer::cloud_config_handler(httpd_req_t* request) {
     if (n <= 0) { std::memset(body, 0, sizeof(body)); return send_json(request, "{\"error\":\"read failed\"}", 400); }
     total += n;
   }
-  char url[192]{}, device_id[65]{}, credential[129]{};
-  bool url_seen = false, id_seen = false, credential_seen = false, valid = true;
+  char url[192]{}, device_id[65]{}, pairing_code[65]{};
+  bool url_seen = false, id_seen = false, code_seen = false, valid = true;
   char* cursor = body;
   while (valid && cursor != nullptr && *cursor != '\0') {
     char* next = std::strchr(cursor, '&');
@@ -671,20 +675,20 @@ esp_err_t LocalServer::cloud_config_handler(httpd_req_t* request) {
     size_t capacity = 0;
     if (std::strcmp(cursor, "url") == 0 && !url_seen) { destination = url; capacity = sizeof(url); url_seen = true; }
     else if (std::strcmp(cursor, "deviceId") == 0 && !id_seen) { destination = device_id; capacity = sizeof(device_id); id_seen = true; }
-    else if (std::strcmp(cursor, "credential") == 0 && !credential_seen) { destination = credential; capacity = sizeof(credential); credential_seen = true; }
+    else if (std::strcmp(cursor, "pairingCode") == 0 && !code_seen) { destination = pairing_code; capacity = sizeof(pairing_code); code_seen = true; }
     else { valid = false; break; }
     if (!decode_form_component(equals) || std::strlen(equals) >= capacity) { valid = false; break; }
     std::memcpy(destination, equals, std::strlen(equals) + 1);
     cursor = next;
   }
-  valid = valid && url_seen && id_seen && credential_seen;
-  const esp_err_t err = valid ? CloudClient::configure(url, device_id, credential) : ESP_ERR_INVALID_ARG;
-  std::memset(credential, 0, sizeof(credential));
+  valid = valid && url_seen && id_seen && code_seen;
+  const esp_err_t err = valid ? CloudClient::pair(url, device_id, pairing_code) : ESP_ERR_INVALID_ARG;
+  std::memset(pairing_code, 0, sizeof(pairing_code));
   std::memset(body, 0, sizeof(body));
   std::memset(url, 0, sizeof(url));
   std::memset(device_id, 0, sizeof(device_id));
-  return err == ESP_OK ? send_json(request, "{\"status\":\"saved\"}")
-                       : send_json(request, "{\"error\":\"invalid cloud configuration\"}", 400);
+  return err == ESP_OK ? send_json(request, "{\"status\":\"paired\"}")
+                       : send_json(request, "{\"error\":\"pairing failed; check URL, device ID, code, and network\"}", 400);
 }
 
 esp_err_t LocalServer::ping_handler(httpd_req_t* request) {

@@ -21,6 +21,8 @@ class MemoryRepository implements PairingRepository {
     return true;
   }
   findDevice(id: string): DeviceRecord | null { return this.devices.get(id) ?? null; }
+  listDevices(): DeviceRecord[] { return [...this.devices.values()]; }
+  listCommands(deviceId?: string): CommandRecord[] { return [...this.commands.values()].filter((item) => !deviceId || item.deviceId === deviceId); }
   revokeDevice(id: string, revokedAt: string): boolean {
     const record = this.devices.get(id);
     if (!record || record.revokedAt) return false;

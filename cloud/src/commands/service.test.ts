@@ -9,6 +9,8 @@ class CommandsMemory implements PairingRepository {
   audits: Array<{ kind: string; deviceId?: string; occurredAt: string }> = [];
   createPairingCode(): void {} findActivePairingCodes(): never[] { return []; } completePairing(): boolean { return false; }
   findDevice(id: string): DeviceRecord | null { return this.devices.get(id) ?? null; }
+  listDevices(): DeviceRecord[] { return [...this.devices.values()]; }
+  listCommands(deviceId?: string): CommandRecord[] { return [...this.commands.values()].filter((c) => !deviceId || c.deviceId === deviceId); }
   revokeDevice(): boolean { return false; } recordAudit(event: { kind: string; deviceId?: string; occurredAt: string }): void { this.audits.push(event); }
   markDeviceSeen(id: string, seenAt: string): boolean { const d = this.devices.get(id); if (!d) return false; this.devices.set(id, { ...d, lastSeenAt: seenAt }); return true; }
   createCommand(record: CommandRecord): boolean { if (this.findCommandByIdempotency(record.deviceId, record.idempotencyKey)) return false; this.commands.set(record.commandId, record); return true; }

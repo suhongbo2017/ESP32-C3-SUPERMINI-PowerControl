@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { validateCommandResult } from "../protocol/messages.js";
-import type { CommandRecord, PairingRepository } from "../pairing/repository.js";
+import type { CommandRecord, DeviceDiagnostics, PairingRepository } from "../pairing/repository.js";
 
 const onlineWindowMs = 45_000;
 const commandLifetimeMs = 15_000;
@@ -33,7 +33,7 @@ export class CommandService {
     return record;
   }
 
-  reportSeen(deviceId: string, seenAt: string): boolean { return this.repository.markDeviceSeen(deviceId, seenAt); }
+  reportSeen(deviceId: string, seenAt: string, diagnostics?: DeviceDiagnostics): boolean { return this.repository.markDeviceSeen(deviceId, seenAt, diagnostics); }
 
   claim(deviceId: string): CommandRecord | null {
     return this.repository.claimNextCommand(deviceId, new Date(this.clock()).toISOString());
